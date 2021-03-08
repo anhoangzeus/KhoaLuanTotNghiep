@@ -1,125 +1,97 @@
 import React, { useEffect } from 'react';
-import { ImageBackground, StyleSheet, View, Dimensions, StatusBar, Image } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import Screens from './navigation/Screens';
-import ProjectScreen from './navigation/ProjectScreen';
+import { View, ActivityIndicator } from 'react-native';
+import { 
+  NavigationContainer, 
+  DefaultTheme as NavigationDefaultTheme,
+  DarkTheme as NavigationDarkTheme
+} from '@react-navigation/native';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+
+import { 
+  Provider as PaperProvider, 
+  DefaultTheme as PaperDefaultTheme,
+  DarkTheme as PaperDarkTheme 
+} from 'react-native-paper';
+
+import { DrawerContent } from './screens/DrawerContent';
+
+import MainTabScreen from './screens/MainTabScreen';
+import SupportScreen from './screens/SupportScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import BookmarkScreen from './screens/BookmarkScreen';
+
 import { AuthContext } from './components/context';
+
+import RootStackScreen from './screens/RootStackScreen';
+
 import AsyncStorage from '@react-native-community/async-storage';
-import database from '@react-native-firebase/database';
-import auth from '@react-native-firebase/auth';
-import { localNoti } from './screens/Contents/localNotification';
-import { fcmService } from './screens/Contents/FCMService';
-const { width, height } = Dimensions.get('screen');
+
+const Drawer = createDrawerNavigator();
 
 const App = () => {
+  // const [isLoading, setIsLoading] = React.useState(true);
+  // const [userToken, setUserToken] = React.useState(null); 
+
+  const [isDarkTheme, setIsDarkTheme] = React.useState(false);
+
   const initialLoginState = {
     isLoading: true,
-    userToken: null
+    userName: null,
+    userToken: null,
   };
 
-  const [isLoading, setisLoading] = React.useState(true);
-  const [userToken, setUserToken] = React.useState(null);
-
-
-  useEffect(() => {
-    setTimeout(async () => {
-      let userToken;
-      userToken = null;
-      try {
-        userToken = await AsyncStorage.getItem('userToken');
-      } catch (e) {
-        console.log(e);
-      }
-      dispatch({ type: 'LOGIN', token: userToken })
-    }, 2500)
-  }, []);
-
-  useEffect(()=>{
-    if(auth().currentUser){
-      const options ={
-        soundName: 'default',
-        playSound: true
-      }
-      database().ref('Orders').on('child_changed',snapshot =>{
-        if(snapshot.val().CustomerID==auth().currentUser.uid){
-          var notify={
-            title:"Cập nhật trạng thái đơn hàng",
-            body:"Đơn hàng " +snapshot.val().OrderID+" đã cập nhật trạng thái",
-            id:snapshot.val().OrderID
-          }
-          localNoti.showNotificaton(
-            0,
-            notify.title,
-            notify.body,
-            notify,
-            options
-          )
-        }    
-      })
+  const CustomDefaultTheme = {
+    ...NavigationDefaultTheme,
+    ...PaperDefaultTheme,
+    colors: {
+      ...NavigationDefaultTheme.colors,
+      ...PaperDefaultTheme.colors,
+      background: '#ffffff',
+      text: '#333333'
     }
-   
-  })
-
-  useEffect(() => {
-    fcmService.registerAppWithFCM()
-    fcmService.register(onRegister, onNotification , onOpenNotifiaton)
-    localNoti.configure(onOpenNotifiaton)
-
-    function onRegister (token){
-      console.log(token);
+  }
+  
+  const CustomDarkTheme = {
+    ...NavigationDarkTheme,
+    ...PaperDarkTheme,
+    colors: {
+      ...NavigationDarkTheme.colors,
+      ...PaperDarkTheme.colors,
+      background: '#333333',
+      text: '#ffffff'
     }
+  }
 
-    function onNotification(notify){
-      console.log(notify);
-      const options ={
-        soundName: 'default',
-        playSound: true
-      }
+  const theme = isDarkTheme ? CustomDarkTheme : CustomDefaultTheme;
 
-      localNoti.showNotificaton(
-        0,
-        notify.title,
-        notify.body,
-        notify.message,
-        notify,
-        options
-      )
-    }
-
-    function onOpenNotifiaton(notify){
-      console.log('open');
-      return()=>{
-        fcmService.unRegister();
-        localNoti.unregister()
-      }
-    }
-
-  }, []);
   const loginReducer = (prevState, action) => {
-    switch (action.type) {
-      case 'RETRIEVE_TOKEN':
+    switch( action.type ) {
+      case 'RETRIEVE_TOKEN': 
         return {
           ...prevState,
-          isLoading: false,
           userToken: action.token,
-        };
-      case 'LOGIN':
-        return {
-          ...prevState,
           isLoading: false,
-          userToken: action.token
         };
-      case 'LOGOUT':
+      case 'LOGIN': 
         return {
           ...prevState,
+          userName: action.id,
+          userToken: action.token,
+          isLoading: false,
+        };
+      case 'LOGOUT': 
+        return {
+          ...prevState,
+          userName: null,
           userToken: null,
-          isLoading: false
+          isLoading: false,
         };
-      case 'REGISTER':
+      case 'REGISTER': 
         return {
           ...prevState,
+          userName: action.id,
+          userToken: action.token,
           isLoading: false,
-          userToken: action.token
         };
     }
   };
@@ -127,60 +99,80 @@ const App = () => {
   const [loginState, dispatch] = React.useReducer(loginReducer, initialLoginState);
 
   const authContext = React.useMemo(() => ({
-    signIn: async () => {
-      let userToken;
-      userToken = 'anhchangdeptrai';
+    signIn: async(foundUser) => {
+      // setUserToken('fgkj');
+      // setIsLoading(false);
+      const userToken = String(foundUser[0].userToken);
+      const userName = foundUser[0].username;
+      
       try {
-        await AsyncStorage.setItem('userToken', userToken)
-      } catch (e) {
+        await AsyncStorage.setItem('userToken', userToken);
+      } catch(e) {
         console.log(e);
       }
-
-      dispatch({ type: 'LOGIN', token: userToken });
+      // console.log('user token: ', userToken);
+      dispatch({ type: 'LOGIN', id: userName, token: userToken });
     },
-    signOut: async () => {
+    signOut: async() => {
+      // setUserToken(null);
+      // setIsLoading(false);
       try {
         await AsyncStorage.removeItem('userToken');
-      } catch (e) {
+      } catch(e) {
         console.log(e);
       }
-      setUserToken(null);
-      setisLoading(false);
       dispatch({ type: 'LOGOUT' });
     },
-    signUp: async () => {
-      let userToken;
-      userToken = 'anhchangdeptrai';
-      try {
-        await AsyncStorage.setItem('userToken', userToken)
-      } catch (e) {
-        console.log(e);
-      }
-
-      dispatch({ type: 'REGISTER', token: userToken })
+    signUp: () => {
+      // setUserToken('fgkj');
+      // setIsLoading(false);
+    },
+    toggleTheme: () => {
+      setIsDarkTheme( isDarkTheme => !isDarkTheme );
     }
   }), []);
-  if (loginState.isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <StatusBar barStyle='light-content' backgroundColor='white' />
-        <Image source={require("./assets/whitelogo.png")} style={{ width: width, height: height, resizeMode: 'contain' }} />
+
+  useEffect(() => {
+    setTimeout(async() => {
+      // setIsLoading(false);
+      let userToken;
+      userToken = null;
+      try {
+        userToken = await AsyncStorage.getItem('userToken');
+      } catch(e) {
+        console.log(e);
+      }
+      // console.log('user token: ', userToken);
+      dispatch({ type: 'RETRIEVE_TOKEN', token: userToken });
+    }, 1000);
+  }, []);
+
+  if( loginState.isLoading ) {
+    return(
+      <View style={{flex:1,justifyContent:'center',alignItems:'center'}}>
+        <ActivityIndicator size="large"/>
       </View>
     );
   }
   return (
+    <PaperProvider theme={theme}>
     <AuthContext.Provider value={authContext}>
-      <NavigationContainer>
-        {loginState.userToken == null ?
-          auth().currentUser == null ?
-            <Screens />
-            :
-            <Screens />
-          :
-          <ProjectScreen />
-        }
-      </NavigationContainer>
+    <NavigationContainer theme={theme}>
+      { loginState.userToken !== null ? (
+        <Drawer.Navigator drawerContent={props => <DrawerContent {...props} />}>
+          <Drawer.Screen name="HomeDrawer" component={MainTabScreen} />
+          <Drawer.Screen name="SupportScreen" component={SupportScreen} />
+          <Drawer.Screen name="SettingsScreen" component={SettingsScreen} />
+          <Drawer.Screen name="BookmarkScreen" component={BookmarkScreen} />
+        </Drawer.Navigator>
+      )
+    :
+      <RootStackScreen/>
+    }
+    </NavigationContainer>
     </AuthContext.Provider>
+    </PaperProvider>
   );
 }
+
 export default App;
